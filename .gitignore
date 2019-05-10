@@ -35,3 +35,16 @@
 
 # tags
 tags
+
+# Output
+*.txt
+
+# Graph
+*.binary
+*.edgelist
+
+# Projects
+.idea/
+cmake-build-debug/
+.cproject
+.project
