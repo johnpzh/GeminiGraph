@@ -141,8 +141,12 @@ public:
   MessageBuffer *** recv_buffer; // MessageBuffer* [partitions] [sockets]; numa-aware
 
   Graph() {
-    threads = numa_num_configured_cpus();
-    sockets = numa_num_configured_nodes();
+	  // Add by Johnpzh
+	  threads = 1;
+	  sockets = 1;
+	  // End by Johnpzh
+//    threads = numa_num_configured_cpus();
+//    sockets = numa_num_configured_nodes();
     threads_per_socket = threads / sockets;
 
     init();
@@ -1563,6 +1567,9 @@ public:
         unsigned long word = active->data[WORD_OFFSET(v_i)];
         while (word != 0) {
           if (word & 1) {
+        	  // Add by Johnpzh
+        	  printf("@%d sparse_signal (tid: %#x)...\n", __LINE__, std::this_thread::get_id()); //test
+        	  // End by Johnpzh
             sparse_signal(v_i);
           }
           v_i++;
@@ -1577,7 +1584,10 @@ public:
       recv_queue_mutex.lock();
       recv_queue_size += 1;
       recv_queue_mutex.unlock();
-      std::thread send_thread([&](){
+      std::thread send_thread([&](){ // Thread for Sending
+    	  // Add by Johnpzh
+    	  printf("@%d sparse send_thread running (tid: %#x)...\n", __LINE__, std::this_thread::get_id()); //test
+    	  // End by Johnpzh
         for (int step=1;step<partitions;step++) {
           int i = (partition_id - step + partitions) % partitions;
           for (int s_i=0;s_i<sockets;s_i++) {
@@ -1585,7 +1595,10 @@ public:
           }
         }
       });
-      std::thread recv_thread([&](){
+      std::thread recv_thread([&](){ // Thread for Receiving
+    	  // Add by Johnpzh
+    	  printf("@%d sparse recv_thread running (tid: %#x)...\n", __LINE__, std::this_thread::get_id()); //test
+    	  // End by Johnpzh
         for (int step=1;step<partitions;step++) {
           int i = (partition_id + step) % partitions;
           for (int s_i=0;s_i<sockets;s_i++) {
@@ -1647,7 +1660,13 @@ public:
                 VertexId v_i = buffer[b_i].vertex;
                 M msg_data = buffer[b_i].msg_data;
                 if (outgoing_adj_bitmap[s_i]->get_bit(v_i)) {
-                  local_reducer += sparse_slot(v_i, msg_data, VertexAdjList<EdgeData>(outgoing_adj_list[s_i] + outgoing_adj_index[s_i][v_i], outgoing_adj_list[s_i] + outgoing_adj_index[s_i][v_i+1]));
+              	  // Add by Johnpzh
+              	  printf("@%d sparse_splot (tid: %#x)...\n", __LINE__, std::this_thread::get_id()); //test
+              	  // End by Johnpzh
+                  local_reducer += sparse_slot(
+                		  	  	  	  v_i,
+									  msg_data,
+									  VertexAdjList<EdgeData>(outgoing_adj_list[s_i] + outgoing_adj_index[s_i][v_i], outgoing_adj_list[s_i] + outgoing_adj_index[s_i][v_i+1]));
                 }
               }
             }
@@ -1668,7 +1687,13 @@ public:
                   VertexId v_i = buffer[b_i].vertex;
                   M msg_data = buffer[b_i].msg_data;
                   if (outgoing_adj_bitmap[s_i]->get_bit(v_i)) {
-                    local_reducer += sparse_slot(v_i, msg_data, VertexAdjList<EdgeData>(outgoing_adj_list[s_i] + outgoing_adj_index[s_i][v_i], outgoing_adj_list[s_i] + outgoing_adj_index[s_i][v_i+1]));
+                	  // Add by Johnpzh
+                	  printf("@%d sparse_slot (tid: %#x)...\n", __LINE__, std::this_thread::get_id()); //test
+                	  // End by Johnpzh
+                    local_reducer += sparse_slot(
+                    					v_i,
+										msg_data,
+										VertexAdjList<EdgeData>(outgoing_adj_list[s_i] + outgoing_adj_index[s_i][v_i], outgoing_adj_list[s_i] + outgoing_adj_index[s_i][v_i+1]));
                   }
                 }
               }
@@ -1677,21 +1702,30 @@ public:
           }
         }
       }
+	  // Add by Johnpzh
+	  printf("@%d Just before join Sparse (tid: %#x)...\n", __LINE__, std::this_thread::get_id()); //test
+	  // End by Johnpzh
       send_thread.join();
       recv_thread.join();
       delete [] recv_queue;
-    } else {
+    } else { // Dense
       // dense selective bitmap
       if (dense_selective!=nullptr && partitions>1) {
         double sync_time = 0;
         sync_time -= get_time();
         std::thread send_thread([&](){
+      	  // Add by Johnpzh
+      	  printf("@%d dense send_thread running (tid: %#x)...\n", __LINE__, std::this_thread::get_id()); //test
+      	  // End by Johnpzh
           for (int step=1;step<partitions;step++) {
             int recipient_id = (partition_id + step) % partitions;
             MPI_Send(dense_selective->data + WORD_OFFSET(partition_offset[partition_id]), owned_vertices / 64, MPI_UNSIGNED_LONG, recipient_id, PassMessage, MPI_COMM_WORLD);
           }
         });
         std::thread recv_thread([&](){
+      	  // Add by Johnpzh
+      	  printf("@%d dense recv_thread running (tid: %#x)...\n", __LINE__, std::this_thread::get_id()); //test
+      	  // End by Johnpzh
           for (int step=1;step<partitions;step++) {
             int sender_id = (partition_id - step + partitions) % partitions;
             MPI_Recv(dense_selective->data + WORD_OFFSET(partition_offset[sender_id]), (partition_offset[sender_id + 1] - partition_offset[sender_id]) / 64, MPI_UNSIGNED_LONG, sender_id, PassMessage, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
@@ -1720,6 +1754,9 @@ public:
       std::mutex recv_queue_mutex;
 
       std::thread send_thread([&](){
+      	  // Add by Johnpzh
+      	  printf("@%d dense send_thread running (tid: %#x)...\n", __LINE__, std::this_thread::get_id()); //test
+      	  // End by Johnpzh
         for (int step=0;step<partitions;step++) {
           if (step==partitions-1) {
             break;
@@ -1738,6 +1775,9 @@ public:
         }
       });
       std::thread recv_thread([&](){
+      	  // Add by Johnpzh
+      	  printf("@%d dense recv_thread running (tid: %#x)...\n", __LINE__, std::this_thread::get_id()); //test
+      	  // End by Johnpzh
         std::vector<std::thread> threads;
         for (int step=1;step<partitions;step++) {
           int i = (partition_id - step + partitions) % partitions;
@@ -1785,6 +1825,9 @@ public:
             }
             for (VertexId p_v_i = begin_p_v_i; p_v_i < end_p_v_i; p_v_i ++) {
               VertexId v_i = compressed_incoming_adj_index[s_i][p_v_i].vertex;
+        	  // Add by Johnpzh
+        	  printf("@%d dense_signal (tid: %#x)...\n", __LINE__, std::this_thread::get_id()); //test
+        	  // End by Johnpzh
               dense_signal(v_i, VertexAdjList<EdgeData>(incoming_adj_list[s_i] + compressed_incoming_adj_index[s_i][p_v_i].index, incoming_adj_list[s_i] + compressed_incoming_adj_index[s_i][p_v_i+1].index));
             }
           }
@@ -1801,6 +1844,9 @@ public:
               }
               for (VertexId p_v_i = begin_p_v_i; p_v_i < end_p_v_i; p_v_i ++) {
                 VertexId v_i = compressed_incoming_adj_index[s_i][p_v_i].vertex;
+          	  // Add by Johnpzh
+          	  printf("@%d dense_signal (tid: %#x)...\n", __LINE__, std::this_thread::get_id()); //test
+          	  // End by Johnpzh
                 dense_signal(v_i, VertexAdjList<EdgeData>(incoming_adj_list[s_i] + compressed_incoming_adj_index[s_i][p_v_i].index, incoming_adj_list[s_i] + compressed_incoming_adj_index[s_i][p_v_i+1].index));
               }
             }
@@ -1860,6 +1906,9 @@ public:
             for (b_i=begin_b_i;b_i<end_b_i;b_i++) {
               VertexId v_i = buffer[b_i].vertex;
               M msg_data = buffer[b_i].msg_data;
+        	  // Add by Johnpzh
+        	  printf("@%d dense_slot (tid: %#x)...\n", __LINE__, std::this_thread::get_id()); //test
+        	  // End by Johnpzh
               local_reducer += dense_slot(v_i, msg_data);
             }
           }
@@ -1867,6 +1916,9 @@ public:
           reducer += local_reducer;
         }
       }
+	  // Add by Johnpzh
+	  printf("@%d Just before join Dense (tid: %#x)...\n", __LINE__, std::this_thread::get_id()); //test
+	  // End by Johnpzh
       send_thread.join();
       recv_thread.join();
       delete [] send_queue;
